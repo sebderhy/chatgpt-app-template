@@ -20,7 +20,6 @@ Categories tested:
 """
 
 import json
-import time
 import pytest
 import sys
 from dataclasses import dataclass
@@ -207,8 +206,13 @@ class TestAnnotationCorrectness:
 
             desc_lower = tool.description.lower()
 
-            # Check destructive mismatch
-            mentions_destructive = any(kw in desc_lower for kw in destructive_keywords)
+            # Check destructive mismatch — only flag if the destructive keyword
+            # appears in the primary description or use-case sections, not in
+            # the "Returns:" or "features" sections where it describes client-side
+            # UI capabilities (e.g. "Add/edit/delete functionality" in a todo widget
+            # is a UI feature, not a server-side destructive action).
+            primary_desc = desc_lower.split("returns:")[0].split("returns\n")[0]
+            mentions_destructive = any(kw in primary_desc for kw in destructive_keywords)
             is_destructive = anno_dict.get("destructiveHint", False)
             if mentions_destructive and not is_destructive:
                 violations.append(
@@ -234,6 +238,11 @@ class TestAnnotationCorrectness:
             weight=1.5,
             fix_hint="Align annotations with what the tool actually does",
         ))
+
+        assert len(violations) == 0, (
+            f"Annotation/description mismatches (top rejection reason):\n"
+            + "\n".join(violations)
+        )
 
 
 # =============================================================================
@@ -740,17 +749,25 @@ class TestCrossHostPortability:
         """
         from main import mcp
 
-        # Check if stateless_http is enabled
-        is_stateless = getattr(mcp, '_stateless', None) or True  # Default assumption
-        # Check mcp server config
-        server = getattr(mcp, '_mcp_server', None)
+        # Check if stateless_http was enabled in FastMCP config.
+        # FastMCP stores this as _stateless_http or on the settings object.
+        is_stateless = getattr(mcp, '_stateless_http', None)
+        if is_stateless is None:
+            # Fallback: check settings or _mcp_server attributes
+            settings = getattr(mcp, 'settings', None)
+            if settings:
+                is_stateless = getattr(settings, 'stateless_http', False)
+            else:
+                # Check if streamable_http_app exists (only created when stateless)
+                is_stateless = callable(getattr(mcp, 'streamable_http_app', None))
 
+        passed = bool(is_stateless)
         _report.add_result(GradeResult(
             category="6. Cross-Host Portability",
             check_name="Stateless HTTP support",
-            passed=True,  # Informational
-            score=1.0,
-            details="Server supports stateless HTTP" if is_stateless else "Consider enabling stateless_http=True",
+            passed=passed,
+            score=1.0 if passed else 0.3,
+            details="Server supports stateless HTTP" if passed else "stateless_http is not enabled",
             weight=0.5,
             fix_hint="Set stateless_http=True in FastMCP() for better scalability",
         ))

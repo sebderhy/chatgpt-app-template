@@ -397,7 +397,11 @@ class TestToolVisibility:
             visibility = ui_meta.get("visibility", [])
             if "model" in visibility:
                 violations.append(
-                    f"'{tool.name}' - data-only tool should have visibility=['app'], not {visibility}"
+                    f"'{tool.name}' - data-only tool should not be visible to model, got {visibility}"
+                )
+            if "app" not in visibility:
+                violations.append(
+                    f"'{tool.name}' - data-only tool must include 'app' in visibility to remain callable by widgets, got {visibility}"
                 )
 
         if data_tools == 0:
