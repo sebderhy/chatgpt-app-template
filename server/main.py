@@ -39,7 +39,7 @@ from widgets import (
 from widgets._base import (
     Widget, ASSETS_DIR, MIME_TYPE,
     load_widget_html, get_base_url, get_csp_domains,
-    get_tool_meta, get_invocation_meta, get_tool_schema,
+    get_tool_meta, get_data_only_tool_meta, get_invocation_meta, get_tool_schema,
     format_validation_error,
     EXTERNAL_RESOURCE_DOMAINS, EXTERNAL_CONNECT_DOMAINS,
 )
@@ -110,24 +110,26 @@ async def list_tools() -> List[types.Tool]:
             inputSchema=schema,
             _meta=get_tool_meta(widget),
             annotations={
-                "destructiveHint": False,
-                "openWorldHint": False,
-                "readOnlyHint": True,
+                "readOnlyHint": widget.read_only,
+                "destructiveHint": widget.destructive,
+                "openWorldHint": widget.open_world,
             },
         ))
 
     # Data-only tools: called by widgets via callTool, not intended for LLM use.
     # They must be registered so MCP hosts can route callTool invocations.
+    # visibility=["app"] hides them from the model (SEP-1865).
     for tool_def in DATA_ONLY_TOOL_DEFS:
         tools.append(types.Tool(
             name=tool_def["name"],
             title=tool_def["title"],
             description=tool_def["description"],
             inputSchema=tool_def["inputSchema"],
+            _meta=get_data_only_tool_meta(),
             annotations={
-                "destructiveHint": False,
-                "openWorldHint": False,
-                "readOnlyHint": True,
+                "readOnlyHint": tool_def.get("readOnlyHint", True),
+                "destructiveHint": tool_def.get("destructiveHint", False),
+                "openWorldHint": tool_def.get("openWorldHint", False),
             },
         ))
 
