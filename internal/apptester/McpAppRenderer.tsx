@@ -401,7 +401,12 @@ export default function McpAppRenderer({
     }
   }, [theme, displayMode, appInitialized, sendNotification, buildHostContext]);
 
-  // Build sandbox proxy URL with CSP parameters
+  // Build sandbox proxy URL with CSP parameters.
+  // SECURITY NOTE: In same-origin mode (behind reverse proxies), the sandbox
+  // iframe shares the host origin. Combined with allow-scripts + allow-same-origin,
+  // widgets could theoretically escape the sandbox. This is acceptable for the
+  // app tester (a local dev tool testing your own widgets) but production MCP
+  // Apps hosts (ChatGPT, Claude, VS Code) use dedicated sandbox origins.
   const sandboxProxyUrl = `${getSandboxProxyUrl()}/sandbox-proxy.html`;
 
   return (
