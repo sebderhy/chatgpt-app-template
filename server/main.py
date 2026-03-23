@@ -266,7 +266,7 @@ except Exception:
 # =============================================================================
 
 from starlette.requests import Request
-from starlette.responses import JSONResponse
+from starlette.responses import JSONResponse, HTMLResponse, Response
 from starlette.routing import Route
 import json as json_module
 
@@ -469,6 +469,68 @@ app.routes.append(Route("/chat/reset", reset_chat_endpoint, methods=["POST"]))
 app.routes.append(Route("/chat/status", chat_status_endpoint, methods=["GET"]))
 app.routes.append(Route("/tools", tools_list_endpoint, methods=["GET"]))
 app.routes.append(Route("/tools/call", tool_call_endpoint, methods=["POST"]))
+
+
+# =============================================================================
+# SAME-ORIGIN SANDBOX PROXY (for reverse-proxy environments)
+# =============================================================================
+# In local dev, the sandbox proxy runs on port 8001 for origin isolation.
+# Behind reverse proxies (Cloudflare Tunnel, nginx, cloud platforms, etc.),
+# port 8001 is often not exposed or the proxy injects its own CSP that blocks
+# cross-port iframes. This route serves the sandbox proxy from the same origin
+# (port 8000) at /sandbox/ as a spec-compliant fallback. The iframe sandbox
+# attribute still provides sandboxing per SEP-1865.
+
+async def sandbox_proxy_endpoint(request: Request) -> Response:
+    """Serve sandbox proxy assets with appropriate CSP from the main server.
+
+    Only serves files that start with 'sandbox-proxy' to prevent this route
+    from becoming a general-purpose static file server.
+    """
+    filename = request.path_params.get("filename", "sandbox-proxy.html")
+
+    # Security: only serve sandbox-proxy files, prevent path traversal
+    if ".." in filename or "/" in filename or not filename.startswith("sandbox-proxy"):
+        return Response("Forbidden", status_code=403)
+
+    filepath = ASSETS_DIR / filename
+    if not filepath.exists() or not filepath.is_file():
+        return Response("Not found", status_code=404)
+
+    content = filepath.read_text()
+    content_type = "text/html" if filename.endswith(".html") else \
+                   "application/javascript" if filename.endswith(".js") else \
+                   "text/css" if filename.endswith(".css") else "application/octet-stream"
+
+    # Build CSP for the sandbox
+    csp_domains = get_csp_domains()
+    resource_domains = csp_domains.get("resourceDomains", [])
+    connect_domains = csp_domains.get("connectDomains", [])
+    resource_src = " ".join(resource_domains) if resource_domains else "'self'"
+    connect_src = " ".join(connect_domains) if connect_domains else "'self'"
+
+    csp = (
+        f"default-src 'self'; "
+        f"script-src 'self' 'unsafe-inline' 'unsafe-eval' blob: {resource_src}; "
+        f"style-src 'self' 'unsafe-inline' {resource_src}; "
+        f"img-src 'self' data: blob: {resource_src}; "
+        f"font-src 'self' data: {resource_src}; "
+        f"connect-src 'self' {connect_src}; "
+        f"frame-src 'self' blob:; "
+        f"worker-src 'self' blob: {resource_src};"
+    )
+
+    return Response(
+        content=content,
+        media_type=content_type,
+        headers={
+            "Content-Security-Policy": csp,
+            "Cache-Control": "no-cache, no-store, must-revalidate",
+            "Access-Control-Allow-Origin": "*",
+        },
+    )
+
+app.routes.append(Route("/sandbox/{filename:path}", sandbox_proxy_endpoint, methods=["GET", "OPTIONS"]))
 
 
 # =============================================================================

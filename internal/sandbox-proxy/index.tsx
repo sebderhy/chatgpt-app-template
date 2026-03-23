@@ -37,15 +37,20 @@ interface JsonRpcMessage {
   error?: unknown;
 }
 
-// Get the host origin from the parent window
+// Get the host origin from the parent window.
+// In local dev, the sandbox runs on port 8001 and the host on port 8000.
+// Behind reverse proxies, both share the same origin (served at /sandbox/).
 function getHostOrigin(): string {
-  // In development, the host is on port 8000
-  // The referrer tells us where we came from
+  // Referrer is the most reliable signal — the parent page that loaded us
   if (document.referrer) {
     const url = new URL(document.referrer);
     return url.origin;
   }
-  // Fallback: assume same host, different port
+  // Same-origin mode: sandbox proxy served at /sandbox/ on the main server
+  if (window.location.pathname.startsWith("/sandbox/")) {
+    return window.location.origin;
+  }
+  // Fallback: localhost dev — sandbox on 8001, host on 8000
   return window.location.origin.replace(":8001", ":8000");
 }
 
