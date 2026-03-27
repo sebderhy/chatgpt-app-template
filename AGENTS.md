@@ -89,6 +89,8 @@ Your app is production-ready.
   - `server/tests/chatgpt_app_guidelines_report.txt`
   - `server/tests/output_quality_report.txt`
   - `server/tests/agentic_ux_patterns_report.txt`
+  - `server/tests/protocol_compliance_report.txt`
+  - `server/tests/app_submission_report.txt`
 
 ### Ask First
 - Adding new npm dependencies (especially heavy ones like `three`, `chart.js`)

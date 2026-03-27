@@ -21,6 +21,12 @@ class Widget:
     invoking: str
     invoked: str
     component_name: str
+    # Tool annotations (SEP-1865 stable spec, 2026-01-26)
+    read_only: bool = True
+    destructive: bool = False
+    open_world: bool = False
+    # UI preferences
+    prefers_border: bool = True
 
 
 ASSETS_DIR = Path(__file__).resolve().parent.parent.parent / "assets"
@@ -119,6 +125,12 @@ def get_csp_domains() -> Dict[str, List[str]]:
 
     This allows the MCP App sandbox to load external assets (JS, CSS, images)
     from our server and from external CDNs.
+
+    SEP-1865 stable spec (2026-01-26) defines four CSP domain lists:
+    - resourceDomains: scripts, styles, images, fonts
+    - connectDomains: fetch/XHR requests
+    - frameDomains: nested iframes (e.g., embedded maps, videos)
+    - baseUriDomains: allowed base URIs for relative URL resolution
     """
     base_url = get_base_url()
     # Extract origin from base URL (e.g., "http://localhost:8000" from "http://localhost:8000/assets")
@@ -132,6 +144,8 @@ def get_csp_domains() -> Dict[str, List[str]]:
     return {
         "resourceDomains": resource_domains,  # For scripts, styles, images, fonts
         "connectDomains": connect_domains,    # For fetch/XHR requests
+        "frameDomains": [],                   # Nested iframes (add domains if needed)
+        "baseUriDomains": [origin],           # Base URI for relative URL resolution
     }
 
 
@@ -140,22 +154,45 @@ def get_tool_meta(widget: Widget) -> Dict[str, Any]:
 
     The key field is `ui.resourceUri` which links the tool to its UI resource.
     The `csp` field specifies Content Security Policy domains for the sandbox.
-    This follows the MCP Apps protocol specification.
+    The `visibility` field controls who can call the tool (model, app, or both).
+    The `prefersBorder` field hints to hosts about visual boundary preference.
+    This follows the MCP Apps protocol specification (SEP-1865 stable, 2026-01-26).
     """
     return {
         "ui": {
             "resourceUri": widget.template_uri,
+            "visibility": ["model", "app"],
             "csp": get_csp_domains(),
+            "prefersBorder": widget.prefers_border,
+        },
+    }
+
+
+def get_data_only_tool_meta() -> Dict[str, Any]:
+    """Return MCP Apps metadata for data-only tools (called by widgets, not LLM).
+
+    Data-only tools have visibility=["app"] so MCP hosts hide them from the
+    model's tool list. They are only callable via widget callTool invocations.
+    """
+    return {
+        "ui": {
+            "visibility": ["app"],
         },
     }
 
 
 def get_invocation_meta(widget: Widget) -> Dict[str, Any]:
-    """Return metadata for tool invocation results."""
+    """Return metadata for tool invocation results.
+
+    Per SEP-1865, content-item _meta.ui takes precedence over listing-level
+    metadata. We include full CSP and visibility here for completeness.
+    """
     return {
         "ui": {
             "resourceUri": widget.template_uri,
+            "visibility": ["model", "app"],
             "csp": get_csp_domains(),
+            "prefersBorder": widget.prefers_border,
         },
     }
 

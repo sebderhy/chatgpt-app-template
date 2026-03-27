@@ -63,17 +63,32 @@ interface JsonRpcMessage {
   error?: { code: number; message: string; data?: unknown };
 }
 
-// Get sandbox proxy URL based on current host
+// Detect whether we're running on localhost with direct port access.
+// In local dev, the sandbox proxy runs on a dedicated port (8001) for
+// origin isolation. Behind reverse proxies (Cloudflare Tunnel, nginx,
+// cloud platforms, etc.) port 8001 is typically not exposed, so we fall
+// back to a same-origin /sandbox/ path served by the main server.
+function isLocalDev(): boolean {
+  const origin = window.location.origin;
+  return origin.includes("localhost:8000") || origin.includes("127.0.0.1:8000");
+}
+
+// Get sandbox proxy base URL for building iframe src
 function getSandboxProxyUrl(): string {
-  const baseUrl = window.location.origin;
-  // Replace port with 8001 for sandbox server
-  if (baseUrl.includes(":8000")) {
-    return baseUrl.replace(":8000", ":8001");
+  if (isLocalDev()) {
+    return window.location.origin.replace(":8000", ":8001");
   }
-  // For other ports or no port, assume 8001
-  const url = new URL(baseUrl);
-  url.port = "8001";
-  return url.origin;
+  // Same-origin fallback: sandbox proxy served at /sandbox/ on the main server
+  return `${window.location.origin}/sandbox`;
+}
+
+// Get the origin of the sandbox proxy (for postMessage targetOrigin).
+// postMessage requires a bare origin (scheme+host+port), not a URL path.
+function getSandboxProxyOrigin(): string {
+  if (isLocalDev()) {
+    return window.location.origin.replace(":8000", ":8001");
+  }
+  return window.location.origin;
 }
 
 let messageIdCounter = 0;
@@ -100,7 +115,7 @@ export default function McpAppRenderer({
     const iframe = iframeRef.current;
     if (!iframe?.contentWindow) return;
 
-    const sandboxOrigin = getSandboxProxyUrl();
+    const sandboxOrigin = getSandboxProxyOrigin();
     iframe.contentWindow.postMessage(message, sandboxOrigin);
   }, []);
 
@@ -197,7 +212,7 @@ export default function McpAppRenderer({
       if (!iframe) return;
 
       // Accept messages from sandbox proxy origin
-      const sandboxOrigin = getSandboxProxyUrl();
+      const sandboxOrigin = getSandboxProxyOrigin();
       // Also accept 'null' origin from srcdoc iframes
       if (event.origin !== sandboxOrigin && event.origin !== "null" && !event.origin.includes("localhost")) {
         return;
@@ -386,7 +401,12 @@ export default function McpAppRenderer({
     }
   }, [theme, displayMode, appInitialized, sendNotification, buildHostContext]);
 
-  // Build sandbox proxy URL with CSP parameters
+  // Build sandbox proxy URL with CSP parameters.
+  // SECURITY NOTE: In same-origin mode (behind reverse proxies), the sandbox
+  // iframe shares the host origin. Combined with allow-scripts + allow-same-origin,
+  // widgets could theoretically escape the sandbox. This is acceptable for the
+  // app tester (a local dev tool testing your own widgets) but production MCP
+  // Apps hosts (ChatGPT, Claude, VS Code) use dedicated sandbox origins.
   const sandboxProxyUrl = `${getSandboxProxyUrl()}/sandbox-proxy.html`;
 
   return (

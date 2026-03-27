@@ -137,11 +137,11 @@ _report = MCPBestPracticesReport()
 
 
 async def _get_widget_tools():
-    """Return only widget tools (with _meta.ui) from list_tools.
-    Excludes data-only helper tools that are widget-internal."""
-    from main import list_tools
+    """Return only widget tools (with _meta.ui.resourceUri) from list_tools.
+    Excludes data-only helper tools that have _meta.ui.visibility but no resourceUri."""
+    from main import list_tools, WIDGETS_BY_ID
     tools = await list_tools()
-    return [t for t in tools if getattr(t, '_meta', None) or getattr(t, 'meta', None)]
+    return [t for t in tools if t.name in WIDGETS_BY_ID]
 
 
 def grade_check(category: str, check_name: str, weight: float = 1.0):

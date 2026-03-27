@@ -209,17 +209,19 @@ class TestToolMetadataCompliance:
     @pytest.mark.asyncio
     async def test_widget_tools_have_metadata(self):
         """Widget tools returned by list_tools must have _meta with ui section.
-        Data-only helper tools (no UI) are excluded from this check."""
-        from main import list_tools
+        Data-only helper tools (visibility=["app"] only) are excluded from this check."""
+        from main import list_tools, WIDGETS_BY_ID
         widget_tools_found = 0
         for tool in await list_tools():
             meta = getattr(tool, '_meta', None) or getattr(tool, 'meta', None)
             if meta is None:
-                # Data-only helper tool — no UI metadata required
+                continue
+            # Skip data-only tools — they have _meta.ui.visibility but no resourceUri
+            if tool.name not in WIDGETS_BY_ID:
                 continue
             widget_tools_found += 1
             assert "ui" in meta, f"Tool '{tool.name}' has _meta but missing _meta.ui"
-            assert "resourceUri" in meta["ui"]
+            assert "resourceUri" in meta["ui"], f"Tool '{tool.name}' missing _meta.ui.resourceUri"
         assert widget_tools_found > 0, "Expected at least one widget tool with _meta.ui"
 
 
